@@ -1,0 +1,19 @@
+# Lista de cámaras a monitorizar.
+# Copia este archivo a cameras.yaml y pon tus propias URLs.
+# Usa SOLO streams publicados públicamente o cámaras que controles/tengas permiso de usar.
+cameras:
+  - id: ejemplo-hls
+    name: Cámara de ejemplo (HLS)
+    url: "https://example.com/stream/index.m3u8"
+    enabled: true
+
+  - id: ejemplo-rtsp
+    name: Cámara de ejemplo (RTSP)
+    url: "rtsp://usuario:clave@host:554/stream"
+    enabled: false
+
+  # Webcam local por índice de dispositivo:
+  # - id: webcam-0
+  #   name: Webcam local
+  #   url: 0
+  #   enabled: false

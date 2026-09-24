@@ -1,1 +1,2 @@
 # Dependencias del proyecto
+PyYAML>=6
