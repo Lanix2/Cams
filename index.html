@@ -1,0 +1,780 @@
+<title>Gato al Pez</title>
+<meta name="description" content="Juego de ritmo pixelart: pulsa SALTA o CAMINA al compás para llevar al gato exacto hasta su pescado.">
+<style>
+  /* ---- Mundo visual único (arcade nocturno), pintado explícitamente ---- */
+  :root{
+    color-scheme: dark;
+    --bg:#0b1030; --bg2:#0e1542; --grid:rgba(120,150,255,.09);
+    --panel:rgba(14,20,58,.92); --panel-b:rgba(120,150,255,.22);
+    --brick:#26377e; --brick2:#1b2a67; --brickline:rgba(8,12,44,.65);
+    --surface:#4ef0ff;
+    --walk:#3fe07f; --walk-d:#0f7a3e;
+    --jump:#5aa9ff; --jump-d:#1c4f8f;
+    --gold:#ffd94a; --danger:#ff5566;
+    --text:#d6ddff; --muted:#8390cf;
+    --shadow:0 6px 0 rgba(0,0,0,.35);
+    --pixel:'Press Start 2P', ui-monospace, monospace;
+    --read:'VT323', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--read); overflow:hidden;
+    display:flex; flex-direction:column;
+    -webkit-tap-highlight-color:transparent; user-select:none;
+    touch-action:manipulation;
+  }
+
+  /* ---- HUD superior ---- */
+  #hud{
+    flex:0 0 auto; padding:10px 16px 8px;
+    padding-top:calc(10px + env(safe-area-inset-top,0px));
+    background:linear-gradient(180deg, #090d28, #0b1030);
+    border-bottom:2px solid rgba(120,150,255,.14);
+    display:flex; flex-direction:column; gap:8px;
+  }
+  #stage{
+    font-family:var(--pixel); font-size:clamp(10px,3.2vw,15px);
+    color:var(--text); letter-spacing:1px; line-height:1.5;
+    display:flex; gap:12px; align-items:baseline; flex-wrap:wrap;
+  }
+  #stage .n{color:var(--gold)}
+  #stage .name{color:var(--surface)}
+  #preview{display:flex; gap:8px; align-items:center; min-height:44px}
+  .ptile{
+    width:44px; height:44px; border-radius:8px; flex:0 0 auto;
+    display:grid; place-items:center; font-size:22px; font-weight:bold;
+    background:rgba(20,28,72,.6); border:2px solid rgba(90,169,255,.30);
+    color:rgba(120,150,255,.55); transition:transform .08s;
+  }
+  .ptile.jump{color:var(--jump); border-color:rgba(90,169,255,.5)}
+  .ptile.walk{color:var(--walk); border-color:rgba(63,224,127,.5)}
+  .ptile.now{
+    transform:scale(1.08);
+    box-shadow:0 0 0 2px currentColor, 0 0 16px currentColor;
+    color:var(--walk); background:rgba(63,224,127,.14);
+  }
+  .ptile.now.jump{color:var(--jump); background:rgba(90,169,255,.16)}
+  #preview .arrowlabel{font-family:var(--pixel); font-size:9px; color:var(--muted); margin-left:2px}
+
+  /* ---- Canvas del juego ---- */
+  #stagewrap{position:relative; flex:1 1 auto; min-height:0}
+  #game{display:block; width:100%; height:100%}
+
+  /* mensajes flotantes (PERFECT / GOOD / MISS / combo) */
+  #float{
+    position:absolute; inset:0; pointer-events:none;
+    display:grid; place-items:center; z-index:4;
+  }
+  #judge{
+    font-family:var(--pixel); font-size:clamp(16px,6vw,30px);
+    opacity:0; transform:translateY(10px) scale(.9);
+    text-shadow:0 3px 0 rgba(0,0,0,.4);
+  }
+  #judge.show{animation:pop .5s ease-out}
+  @keyframes pop{
+    0%{opacity:0; transform:translateY(14px) scale(.8)}
+    30%{opacity:1; transform:translateY(-6px) scale(1.05)}
+    100%{opacity:0; transform:translateY(-26px) scale(1)}
+  }
+  #combo{
+    position:absolute; top:10px; right:14px; z-index:4;
+    font-family:var(--pixel); font-size:11px; color:var(--gold);
+    text-shadow:0 2px 0 rgba(0,0,0,.4);
+  }
+
+  /* ---- Controles inferiores ---- */
+  #controls{
+    flex:0 0 auto; padding:14px 16px;
+    padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));
+    background:linear-gradient(0deg, #090d28, #0b1030);
+    border-top:2px solid rgba(120,150,255,.14);
+    display:flex; flex-direction:column; gap:10px;
+  }
+  #pads{display:flex; gap:14px; justify-content:center}
+  .pad{
+    flex:1 1 0; max-width:230px; min-height:96px; border-radius:16px;
+    background:var(--panel); cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    font-family:var(--pixel); font-size:14px; letter-spacing:1px;
+    transition:transform .06s, box-shadow .06s; -webkit-user-select:none;
+  }
+  .pad .glyph{font-size:30px; line-height:1}
+  .pad.jump{color:var(--jump); border:3px solid var(--jump); box-shadow:0 6px 0 var(--jump-d), 0 0 18px rgba(90,169,255,.25)}
+  .pad.walk{color:var(--walk); border:3px solid var(--walk); box-shadow:0 6px 0 var(--walk-d), 0 0 18px rgba(63,224,127,.25)}
+  .pad:active,.pad.hit{transform:translateY(4px)}
+  .pad.jump:active,.pad.jump.hit{box-shadow:0 2px 0 var(--jump-d), 0 0 26px rgba(90,169,255,.5)}
+  .pad.walk:active,.pad.walk.hit{box-shadow:0 2px 0 var(--walk-d), 0 0 26px rgba(63,224,127,.5)}
+  .pad.beat{box-shadow:0 6px 0 rgba(0,0,0,.3), 0 0 30px currentColor}
+
+  #bar{display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:20px}
+  #bar .left{display:flex; gap:14px; align-items:center; color:var(--muted)}
+  .chip{
+    font-family:var(--pixel); font-size:10px; color:var(--muted);
+    background:rgba(20,28,72,.5); border:2px solid var(--panel-b);
+    border-radius:8px; padding:8px 10px; cursor:pointer;
+  }
+  .chip:active{transform:translateY(2px)}
+  #hint{font-size:19px; color:var(--muted); text-align:center; min-height:22px}
+
+  /* ---- Overlays ---- */
+  .overlay{
+    position:absolute; inset:0; z-index:6; display:grid; place-items:center;
+    background:rgba(6,9,26,.82); backdrop-filter:blur(2px);
+    padding:24px; text-align:center;
+  }
+  .card{max-width:520px; display:flex; flex-direction:column; align-items:center; gap:18px}
+  .big{
+    font-family:var(--pixel); line-height:1.4; text-wrap:balance;
+    font-size:clamp(20px,7vw,40px);
+  }
+  .big.gold{color:var(--gold); text-shadow:0 4px 0 rgba(0,0,0,.4)}
+  .big.red{color:var(--danger); text-shadow:0 4px 0 rgba(0,0,0,.4)}
+  .sub{font-size:22px; color:var(--text); line-height:1.35; max-width:34ch}
+  .sub b.walk{color:var(--walk)} .sub b.jump{color:var(--jump)}
+  .btn{
+    font-family:var(--pixel); font-size:14px; letter-spacing:1px;
+    color:#08122b; background:var(--gold); border:none; cursor:pointer;
+    padding:16px 26px; border-radius:12px; box-shadow:0 5px 0 #b8952b;
+  }
+  .btn:active{transform:translateY(3px); box-shadow:0 2px 0 #b8952b}
+  .btn.ghost{background:transparent; color:var(--text); border:2px solid var(--panel-b); box-shadow:none; padding:14px 22px}
+  .row{display:flex; gap:12px; flex-wrap:wrap; justify-content:center}
+  [hidden]{display:none!important}
+  :focus-visible{outline:3px solid var(--gold); outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){ #judge.show{animation-duration:.01s} }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+
+<div id="hud">
+  <div id="stage"><span>STAGE <span class="n" id="stageNum">1</span></span><span class="name" id="stageName">PRIMER SALTO</span></div>
+  <div id="preview" aria-hidden="true"></div>
+</div>
+
+<div id="stagewrap">
+  <canvas id="game"></canvas>
+  <div id="combo" hidden></div>
+  <div id="float"><div id="judge"></div></div>
+
+  <div class="overlay" id="titleScreen">
+    <div class="card">
+      <div class="big gold">GATO AL PEZ</div>
+      <div class="sub">Un gato con hambre y sentido del ritmo. Pulsa al compás:
+        <br><b class="walk">CAMINA →</b> para avanzar por el suelo,
+        <b class="jump">SALTA ↑</b> para cruzar huecos y pinchos.
+        <br>Llega <b>exacto</b> hasta el pescado.</div>
+      <button class="btn" id="startBtn">EMPEZAR</button>
+      <div style="font-size:19px;color:var(--muted)">Teclado: ESPACIO / ↑ = saltar · → / ENTER = caminar</div>
+    </div>
+  </div>
+
+  <div class="overlay" id="winScreen" hidden>
+    <div class="card">
+      <div class="big gold" id="winTitle">¡NIVEL COMPLETO!</div>
+      <div class="sub" id="winSub"></div>
+      <div class="row">
+        <button class="btn" id="nextBtn">SIGUIENTE</button>
+        <button class="btn ghost" id="replayBtn">REPETIR</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="deadScreen" hidden>
+    <div class="card">
+      <div class="big red" id="deadTitle">¡UPS!</div>
+      <div class="sub" id="deadSub"></div>
+      <button class="btn" id="retryBtn">REINTENTAR</button>
+    </div>
+  </div>
+</div>
+
+<div id="controls">
+  <div id="pads">
+    <div class="pad jump" id="padJump" role="button" tabindex="0"><span class="glyph">↑</span>SALTA</div>
+    <div class="pad walk" id="padWalk" role="button" tabindex="0"><span class="glyph">→</span>CAMINA</div>
+  </div>
+  <div id="hint">Pulsa cuando la casilla se ilumine.</div>
+  <div id="bar">
+    <div class="left"><span id="bestLbl">RÉCORD COMBO: 0</span></div>
+    <div class="row" style="gap:8px">
+      <button class="chip" id="soundBtn">🔊 SONIDO</button>
+      <button class="chip" id="menuBtn">☰ NIVELES</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="menuScreen" hidden>
+  <div class="card">
+    <div class="big gold" style="font-size:clamp(18px,6vw,30px)">NIVELES</div>
+    <div class="row" id="levelList"></div>
+    <button class="btn ghost" id="menuClose">CERRAR</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------------------------------------------------------------------------
+  // Niveles.  '_' suelo · 'o' hueco · 'x' pinchos.  El primer tile es el gato,
+  // el último es el pescado (ambos son suelo).  Los obstáculos van aislados:
+  // siempre hay suelo antes y después, así SALTAR (avanza 2) cae seguro.
+  // ---------------------------------------------------------------------------
+  const LEVELS = [
+    { name:"PRIMER SALTO", bpm:60,  map:"___o___" },
+    { name:"CHARCOS",      bpm:70,  map:"__o__o__o__" },
+    { name:"PINCHOS",      bpm:80,  map:"___x___x___" },
+    { name:"DOBLE O NADA", bpm:92,  map:"__o__x__o__x__" },
+    { name:"TEJADOS",      bpm:104, map:"__x__o__x__o__x__" },
+    { name:"EL GRAN PEZ",  bpm:116, map:"__o__x__o__x__o__x__" },
+  ];
+
+  const KIND = { '_':'ground', 'o':'gap', 'x':'spike' };
+
+  // Deriva la secuencia de acciones (el "solucionario") a partir del mapa.
+  function solve(tiles){
+    const steps = [];
+    let i = 0;
+    while (i < tiles.length - 1){
+      const next = tiles[i+1];
+      if (next.type === 'ground'){ steps.push({action:'walk', from:i, to:i+1}); i += 1; }
+      else { steps.push({action:'jump', from:i, to:i+2}); i += 2; } // salta el obstáculo
+    }
+    return steps;
+  }
+
+  function parse(level){
+    const tiles = [...level.map].map((ch,i)=>({ type: KIND[ch]||'ground', i }));
+    tiles[0].type = 'ground';
+    tiles[tiles.length-1].type = 'ground';
+    return { ...level, tiles, steps: solve(tiles), fish: tiles.length-1 };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sprites pixel-art (dibujados con rectángulos, sin imágenes externas).
+  // ---------------------------------------------------------------------------
+  const CAT_PAL = { D:'#b5651d', O:'#f4a24c', L:'#ffe3bd', K:'#241a3a', P:'#ff8fa3' };
+  const CAT_IDLE = [
+    "..D......D..",
+    ".DOD....DOD.",
+    ".DOODDDDOOD.",
+    ".DOOOOOOOOD.",
+    ".DOKOOOOKOD.",
+    ".DOOOPPOOOD.",
+    ".DOLLLLLLOD.",
+    ".DOOOOOOOOD.",
+    "..DOO..OOD..",
+    "...DD..DD...",
+  ];
+  const CAT_JUMP = [
+    "..D......D..",
+    ".DOD....DOD.",
+    ".DOODDDDOOD.",
+    ".DOOOOOOOOD.",
+    ".DOKOOOOKOD.",
+    ".DOOOPPOOOD.",
+    ".DOLLLLLLOD.",
+    ".DOOOOOOOOD.",
+    "..OO....OO..",
+    "..DD....DD..",
+  ];
+  const FISH_PAL = { f:'#e0562c', F:'#ff9a5c', W:'#ffffff', K:'#241a3a' };
+  const FISH = [
+    "..ffff....",
+    ".fFFFFf.t.",
+    "fFWKFFFftt",
+    "fFFFFFFFtt",
+    "fFFFFFFftt",
+    ".fFFFFf.t.",
+    "..ffff....",
+  ];
+  // 't' de la cola comparte color del cuerpo oscuro
+  FISH_PAL.t = '#e0562c';
+
+  function spriteWidth(m){ return m[0].length; }
+  function drawSprite(ctx, m, pal, x, y, px){
+    for (let r=0;r<m.length;r++){
+      const row=m[r];
+      for (let c=0;c<row.length;c++){
+        const ch=row[c];
+        if (ch===' '||ch==='.') continue;
+        const col=pal[ch]; if(!col) continue;
+        ctx.fillStyle=col;
+        ctx.fillRect(Math.round(x+c*px), Math.round(y+r*px), Math.ceil(px), Math.ceil(px));
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Estado del juego
+  // ---------------------------------------------------------------------------
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  let W=0, H=0, DPR=1;
+  let tile=48, groundY=0;
+  let stars=[];
+
+  const G = {
+    levelIndex:0, level:null,
+    state:'title',            // title | playing | won | dead
+    startTime:0, beatMs:1000, LEAD:4,
+    step:0,                   // índice del próximo movimiento
+    cat:{ pos:0, anim:null, shake:0 },
+    combo:0, best:0, unlocked:0,
+    confetti:[], deathAnim:null,
+  };
+
+  // persistencia (best combo + niveles desbloqueados) — tolerante a fallos
+  try {
+    const s = JSON.parse(localStorage.getItem('gatoalpez')||'{}');
+    G.best = s.best||0; G.unlocked = Math.min(s.unlocked||0, LEVELS.length-1);
+  } catch(e){}
+  function save(){ try{ localStorage.setItem('gatoalpez', JSON.stringify({best:G.best, unlocked:G.unlocked})); }catch(e){} }
+
+  // ---------------------------------------------------------------------------
+  // Audio (WebAudio, creado tras el primer gesto del usuario)
+  // ---------------------------------------------------------------------------
+  let AC=null, soundOn=true;
+  function initAudio(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ AC=null; } } }
+  function blip(freq, dur, type='square', gain=0.06){
+    if(!AC||!soundOn) return;
+    try{
+      const o=AC.createOscillator(), g=AC.createGain();
+      o.type=type; o.frequency.value=freq;
+      g.gain.value=gain; o.connect(g); g.connect(AC.destination);
+      const t=AC.currentTime;
+      g.gain.setValueAtTime(gain,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+      o.start(t); o.stop(t+dur);
+    }catch(e){}
+  }
+  const sTick   = ()=>blip(330,0.05,'square',0.03);
+  const sPerfect= ()=>{ blip(880,0.09,'square',0.07); blip(1320,0.09,'triangle',0.05); };
+  const sGood   = ()=>blip(660,0.09,'square',0.06);
+  const sFail   = ()=>{ blip(160,0.28,'sawtooth',0.08); };
+  const sWin    = ()=>{ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>blip(f,0.16,'square',0.07), i*130)); };
+
+  // ---------------------------------------------------------------------------
+  // Layout / resize
+  // ---------------------------------------------------------------------------
+  function resize(){
+    const wrap=document.getElementById('stagewrap');
+    const w=wrap.clientWidth, h=wrap.clientHeight;
+    DPR=Math.min(window.devicePixelRatio||1, 2);
+    W=w; H=h; cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR);
+    cv.style.width=w+'px'; cv.style.height=h+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.imageSmoothingEnabled=false;
+    tile=Math.max(38, Math.min(64, Math.floor(Math.min(w/8, h/6))));
+    groundY=Math.round(h*0.60);
+    if(!stars.length || stars._w!==w){
+      stars=[]; const n=Math.round(w*h/9000);
+      for(let i=0;i<n;i++) stars.push({x:Math.random()*w, y:Math.random()*h*0.9, r:Math.random()<0.85?1:2, tw:Math.random()*Math.PI*2, sp:0.4+Math.random()*1.2});
+      stars._w=w;
+    }
+  }
+  window.addEventListener('resize', resize);
+
+  // ---------------------------------------------------------------------------
+  // Coordenadas del mundo
+  // ---------------------------------------------------------------------------
+  const tileCenterX = i => i*tile + tile/2;
+  function camX(){
+    const cx = tileCenterX(catFloatPos());
+    let c = cx - W*0.30;
+    const worldW = G.level.tiles.length*tile;
+    c = Math.max(-16, Math.min(c, Math.max(-16, worldW - W + 16)));
+    return c;
+  }
+  // posición fraccionaria del gato (interpola durante la animación)
+  function catFloatPos(){
+    const a=G.cat.anim;
+    if(!a) return G.cat.pos;
+    const t=Math.min(1,(performance.now()-a.start)/a.dur);
+    const e=easeOut(t);
+    return a.from + (a.to-a.from)*e;
+  }
+  function catJumpY(){
+    const a=G.cat.anim;
+    if(!a||!a.jump) return 0;
+    const t=Math.min(1,(performance.now()-a.start)/a.dur);
+    return -Math.sin(Math.PI*t)*tile*1.35;
+  }
+  const easeOut = t => 1-Math.pow(1-t,2.2);
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+  function draw(now){
+    ctx.clearRect(0,0,W,H);
+    // fondo
+    ctx.fillStyle=getCSS('--bg'); ctx.fillRect(0,0,W,H);
+    // rejilla
+    ctx.strokeStyle=getCSS('--grid'); ctx.lineWidth=1;
+    const gs=tile;
+    ctx.beginPath();
+    for(let x=(-(camX()%gs)); x<W; x+=gs){ ctx.moveTo(x,0); ctx.lineTo(x,H); }
+    for(let y=0; y<H; y+=gs){ ctx.moveTo(0,y); ctx.lineTo(W,y); }
+    ctx.stroke();
+    // estrellas
+    for(const s of stars){
+      const a = reduce ? 0.5 : 0.35+0.35*(0.5+0.5*Math.sin(now*0.001*s.sp+s.tw));
+      ctx.globalAlpha=a; ctx.fillStyle='#aab6ff';
+      ctx.fillRect(s.x, s.y, s.r, s.r);
+    }
+    ctx.globalAlpha=1;
+
+    if(!G.level){ return; }
+
+    const cx = camX();
+    let shake=0;
+    if(G.cat.shake>0){ shake=(Math.random()-0.5)*G.cat.shake; G.cat.shake*=0.86; if(G.cat.shake<0.4)G.cat.shake=0; }
+    ctx.save();
+    ctx.translate(-cx+shake, 0);
+
+    const tiles=G.level.tiles;
+    for(let i=0;i<tiles.length;i++){
+      const t=tiles[i], x=i*tile;
+      if(x-cx < -tile || x-cx > W+tile) continue;
+      if(t.type==='gap') continue; // hueco: sin suelo
+      drawGround(x, i);
+      if(t.type==='spike') drawSpikes(x);
+    }
+    // línea de superficie luminosa
+    ctx.strokeStyle=getCSS('--surface'); ctx.lineWidth=3; ctx.globalAlpha=0.9;
+    for(let i=0;i<tiles.length;i++){
+      if(tiles[i].type==='gap') continue;
+      const x=i*tile;
+      if(x-cx < -tile || x-cx > W+tile) continue;
+      ctx.beginPath(); ctx.moveTo(x, groundY); ctx.lineTo(x+tile, groundY); ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+
+    // pescado (meta)
+    drawFish(G.level.fish);
+
+    // gato
+    drawCat();
+
+    ctx.restore();
+
+    // confeti (encima, en coords de pantalla)
+    if(G.confetti.length) drawConfetti();
+  }
+
+  function drawGround(x, i){
+    const top=groundY;
+    ctx.fillStyle=getCSS('--brick'); ctx.fillRect(x, top, tile, H-top+2);
+    // ladrillos
+    ctx.strokeStyle=getCSS('--brickline'); ctx.lineWidth=1;
+    const bh=Math.max(10, Math.floor(tile/3.2));
+    for(let yy=top+bh, row=0; yy<H; yy+=bh, row++){
+      ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x+tile, yy); ctx.stroke();
+      const off = (row%2===0)? tile/2 : 0;
+      ctx.beginPath(); ctx.moveTo(x+off, yy); ctx.lineTo(x+off, Math.min(H, yy+bh)); ctx.stroke();
+    }
+    ctx.fillStyle=getCSS('--brick2'); ctx.fillRect(x, top, tile, 3);
+  }
+  function drawSpikes(x){
+    const n=4, w=tile/n, h=tile*0.42;
+    ctx.fillStyle='#9fb0d8';
+    for(let k=0;k<n;k++){
+      const sx=x+k*w;
+      ctx.beginPath();
+      ctx.moveTo(sx, groundY); ctx.lineTo(sx+w/2, groundY-h); ctx.lineTo(sx+w, groundY);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle='rgba(255,255,255,.35)';
+    for(let k=0;k<n;k++){ ctx.fillRect(x+k*w+w/2-1, groundY-h, 1, h*0.6); }
+  }
+  function drawFish(i){
+    const px=Math.max(3, tile/12);
+    const w=spriteWidth(FISH)*px, h=FISH.length*px;
+    const x=tileCenterX(i)-w/2;
+    const bob=reduce?0:Math.sin(performance.now()*0.004)*3;
+    const y=groundY - h - 6 + bob;
+    drawSprite(ctx, FISH, FISH_PAL, x, y, px);
+  }
+  function drawCat(){
+    const m = (G.cat.anim&&G.cat.anim.jump) ? CAT_JUMP : CAT_IDLE;
+    const px=Math.max(3, tile/13);
+    const w=spriteWidth(m)*px, h=m.length*px;
+    const x=tileCenterX(catFloatPos())-w/2;
+    let bob=0;
+    if(G.state==='playing' && !G.cat.anim && !reduce){
+      const ph=((performance.now()-G.startTime)/G.beatMs)%1;
+      bob=Math.abs(Math.sin(ph*Math.PI))*-3;
+    }
+    let y=groundY - h + catJumpY() + bob;
+    if(G.deathAnim){ // cae al vacío
+      const t=(performance.now()-G.deathAnim.start)/600;
+      y += t*t*H*1.4;
+    }
+    // sombra
+    ctx.globalAlpha=0.25; ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.ellipse(x+w/2, groundY-2, w*0.4, 5, 0, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+    drawSprite(ctx, m, CAT_PAL, x, y, px);
+    // bigotes
+    ctx.strokeStyle='rgba(255,240,220,.7)'; ctx.lineWidth=1;
+    const wy=y+6*px;
+    ctx.beginPath();
+    ctx.moveTo(x+w*0.86, wy);   ctx.lineTo(x+w*1.05, wy-2);
+    ctx.moveTo(x+w*0.86, wy+3); ctx.lineTo(x+w*1.05, wy+4);
+    ctx.stroke();
+  }
+  function drawConfetti(){
+    const cols=['--walk','--jump','--gold','--surface','--danger'].map(getCSS);
+    for(const p of G.confetti){
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+      ctx.fillStyle=cols[p.c]; ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*0.6); ctx.restore();
+    }
+  }
+
+  const _cssCache={};
+  function getCSS(v){
+    if(_cssCache[v]===undefined){
+      _cssCache[v]=getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    }
+    return _cssCache[v];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bucle principal
+  // ---------------------------------------------------------------------------
+  let lastBeat=-1;
+  function loop(now){
+    // metrónomo visual + sonido
+    if(G.state==='playing'){
+      const beat=Math.floor((now-G.startTime)/G.beatMs);
+      if(beat!==lastBeat && beat>=0){
+        lastBeat=beat; sTick();
+        pulsePads();
+      }
+      // ¿fallo por no pulsar a tiempo?
+      if(G.step < G.level.steps.length){
+        const bt=beatTime(G.step), win=G.beatMs*0.42;
+        if(now > bt+win){ fail('¡FUERA DE RITMO!'); }
+      }
+      // fin de animación de movimiento
+      const a=G.cat.anim;
+      if(a && now-a.start>=a.dur){
+        G.cat.pos=a.to; G.cat.anim=null;
+        if(G.cat.pos>=G.level.fish){ win(); }
+      }
+    }
+
+    // confeti físico
+    if(G.confetti.length){
+      for(const p of G.confetti){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.15; p.rot+=p.vr; }
+      G.confetti=G.confetti.filter(p=>p.y<H+30);
+    }
+
+    draw(now);
+    requestAnimationFrame(loop);
+  }
+
+  const beatTime = k => G.startTime + (G.LEAD + k)*G.beatMs;
+
+  function pulsePads(){
+    const next=G.level.steps[G.step];
+    if(!next) return;
+    const pad = next.action==='jump' ? padJump : padWalk;
+    pad.classList.add('beat'); setTimeout(()=>pad.classList.remove('beat'), 120);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lógica de entrada
+  // ---------------------------------------------------------------------------
+  function press(action){
+    if(G.state!=='playing') return;
+    if(G.step>=G.level.steps.length) return;
+    const now=performance.now();
+    const bt=beatTime(G.step), win=G.beatMs*0.42, perfect=G.beatMs*0.16;
+    const d=now-bt;
+    if(d < -win) return; // demasiado pronto: se ignora (sin castigo)
+    const want=G.level.steps[G.step];
+    if(action!==want.action){ fail(action==='walk'?'¡DEBÍAS SALTAR!':'¡DEBÍAS CAMINAR!'); return; }
+    // acierto
+    const rating = Math.abs(d)<=perfect ? 'perfect':'good';
+    if(rating==='perfect'){ sPerfect(); judge('¡PERFECTO!', getCSS('--gold')); }
+    else { sGood(); judge('¡BIEN!', getCSS('--surface')); }
+    G.combo++; if(G.combo>G.best){ G.best=G.combo; save(); bestLbl.textContent='RÉCORD COMBO: '+G.best; }
+    showCombo();
+    // animación de movimiento
+    G.cat.anim={ from:G.cat.pos, to:want.to, jump:want.action==='jump',
+                 start:now, dur:Math.min(G.beatMs*0.9, 260) };
+    G.step++;
+    renderPreview();
+    const pad = want.action==='jump'?padJump:padWalk;
+    pad.classList.add('hit'); setTimeout(()=>pad.classList.remove('hit'),90);
+  }
+
+  function fail(msg){
+    if(G.state!=='playing') return;
+    G.state='dead'; G.combo=0; showCombo();
+    sFail(); G.cat.shake=14;
+    const onGap = G.level.tiles[Math.min(G.cat.pos+1, G.level.tiles.length-1)]?.type==='gap';
+    // si el fallo fue por caminar hacia un hueco, anima la caída
+    const nextT = G.level.steps[G.step];
+    if(nextT && nextT.action==='jump'){
+      // se cae/pincha en el obstáculo que debía saltar
+      G.cat.pos = nextT.from + 1;
+      if(G.level.tiles[G.cat.pos]?.type==='gap') G.deathAnim={start:performance.now()};
+    }
+    judge('¡MISS!', getCSS('--danger'));
+    setTimeout(()=>{
+      deadSub.textContent = msg + '  El gato se quedó sin pescado.';
+      show(deadScreen);
+    }, 650);
+  }
+
+  function win(){
+    G.state='won'; sWin();
+    burstConfetti();
+    G.unlocked=Math.max(G.unlocked, Math.min(G.levelIndex+1, LEVELS.length-1)); save();
+    const last = G.levelIndex>=LEVELS.length-1;
+    winTitle.textContent = last ? '¡GATO FELIZ!' : '¡NIVEL COMPLETO!';
+    winSub.innerHTML = last
+      ? 'Te comiste todos los pescados del arcade. 🐟<br>Combo récord: '+G.best
+      : 'Combo: '+G.combo+' · Récord: '+G.best;
+    nextBtn.hidden = last;
+    setTimeout(()=>show(winScreen), 500);
+  }
+
+  function burstConfetti(){
+    const n=reduce?24:90;
+    for(let i=0;i<n;i++){
+      G.confetti.push({ x:W*Math.random(), y:-10-Math.random()*40,
+        vx:(Math.random()-0.5)*4, vy:1+Math.random()*3, vr:(Math.random()-0.5)*0.3,
+        rot:Math.random()*6, s:6+Math.random()*8, c:(Math.random()*5)|0 });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mensajes / HUD
+  // ---------------------------------------------------------------------------
+  const judgeEl=document.getElementById('judge');
+  function judge(text,color){
+    judgeEl.textContent=text; judgeEl.style.color=color;
+    judgeEl.classList.remove('show'); void judgeEl.offsetWidth; judgeEl.classList.add('show');
+  }
+  const comboEl=document.getElementById('combo');
+  function showCombo(){
+    if(G.combo>=2){ comboEl.hidden=false; comboEl.textContent='COMBO x'+G.combo; }
+    else comboEl.hidden=true;
+  }
+
+  const previewEl=document.getElementById('preview');
+  function renderPreview(){
+    previewEl.innerHTML='';
+    const steps=G.level.steps;
+    for(let k=0;k<4;k++){
+      const st=steps[G.step+k];
+      const d=document.createElement('div');
+      d.className='ptile';
+      if(!st){ d.textContent='🐟'; d.style.color=getCSS('--gold'); previewEl.appendChild(d); break; }
+      d.classList.add(st.action);
+      if(k===0) d.classList.add('now');
+      d.textContent = st.action==='jump' ? '↑' : '→';
+      previewEl.appendChild(d);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Flujo de niveles / pantallas
+  // ---------------------------------------------------------------------------
+  const screens=['titleScreen','winScreen','deadScreen','menuScreen'].map(id=>document.getElementById(id));
+  function hideScreens(){ screens.forEach(s=>s.hidden=true); }
+  function show(el){ el.hidden=false; }
+
+  function startLevel(idx){
+    initAudio();
+    G.levelIndex=Math.max(0, Math.min(idx, LEVELS.length-1));
+    G.level=parse(LEVELS[G.levelIndex]);
+    G.beatMs=60000/G.level.bpm;
+    G.step=0; G.combo=0; lastBeat=-1;
+    G.cat={ pos:0, anim:null, shake:0 };
+    G.deathAnim=null; G.confetti=[];
+    G.state='playing'; G.startTime=performance.now();
+    hideScreens(); comboEl.hidden=true;
+    stageNum.textContent=G.levelIndex+1;
+    stageName.textContent=G.level.name;
+    bestLbl.textContent='RÉCORD COMBO: '+G.best;
+    renderPreview();
+  }
+
+  function buildMenu(){
+    levelList.innerHTML='';
+    LEVELS.forEach((lv,i)=>{
+      const b=document.createElement('button');
+      const locked = i>G.unlocked;
+      b.className='btn'+(locked?' ghost':'');
+      b.style.fontSize='12px';
+      b.textContent=(i+1)+'. '+(locked?'🔒':lv.name);
+      b.disabled=locked;
+      b.onclick=()=>startLevel(i);
+      levelList.appendChild(b);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Eventos
+  // ---------------------------------------------------------------------------
+  const padJump=document.getElementById('padJump');
+  const padWalk=document.getElementById('padWalk');
+  const bestLbl=document.getElementById('bestLbl');
+  const stageNum=document.getElementById('stageNum');
+  const stageName=document.getElementById('stageName');
+  const deadSub=document.getElementById('deadSub');
+  const winSub=document.getElementById('winSub');
+  const winTitle=document.getElementById('winTitle');
+  const nextBtn=document.getElementById('nextBtn');
+  const levelList=document.getElementById('levelList');
+  const winScreen=document.getElementById('winScreen');
+  const deadScreen=document.getElementById('deadScreen');
+  const menuScreen=document.getElementById('menuScreen');
+
+  function bindPad(el, action){
+    el.addEventListener('pointerdown', e=>{ e.preventDefault(); initAudio(); press(action); });
+    el.addEventListener('keydown', e=>{ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); press(action); } });
+  }
+  bindPad(padJump,'jump'); bindPad(padWalk,'walk');
+
+  addEventListener('keydown', e=>{
+    if(e.repeat) return;
+    if(e.code==='Space'||e.code==='ArrowUp'){ e.preventDefault(); press('jump'); }
+    else if(e.code==='ArrowRight'||e.code==='Enter'){ e.preventDefault(); press('walk'); }
+  });
+
+  document.getElementById('startBtn').onclick=()=>startLevel(0);
+  document.getElementById('retryBtn').onclick=()=>startLevel(G.levelIndex);
+  document.getElementById('replayBtn').onclick=()=>startLevel(G.levelIndex);
+  nextBtn.onclick=()=>startLevel(G.levelIndex+1);
+  document.getElementById('menuBtn').onclick=()=>{ buildMenu(); show(menuScreen); };
+  document.getElementById('menuClose').onclick=()=>{ menuScreen.hidden=true; };
+  document.getElementById('soundBtn').onclick=(e)=>{
+    soundOn=!soundOn; initAudio();
+    e.currentTarget.textContent = soundOn ? '🔊 SONIDO' : '🔇 SILENCIO';
+  };
+
+  // ---------------------------------------------------------------------------
+  // Arranque (con soporte de recarga en caliente para vistas ya abiertas)
+  // ---------------------------------------------------------------------------
+  function boot(data){
+    resize();
+    G.state='title';
+    renderPreview();
+    requestAnimationFrame(loop);
+  }
+  try{
+    if(window.claude?.hot?.ready) window.claude.hot.ready(boot);
+    else boot(window.claude?.hot?.data||{});
+    window.claude?.hot?.snapshot?.(()=>({level:G.levelIndex}));
+  }catch(e){ boot({}); }
+})();
+</script>

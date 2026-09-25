@@ -1,52 +1,30 @@
-# Cams
+# Gato al Pez 🐱🐟
 
-Herramienta de auditoría para descubrir cámaras IP en **tu propia red** (o
-en una red sobre la que tengas autorización explícita para auditar) y
-detectar las que están expuestas sin la configuración de seguridad adecuada.
+Juego de ritmo pixelart en 2D. Un gato tiene que llegar **exacto** hasta su
+pescado cruzando huecos y pinchos. En cada beat pulsas la acción correcta:
 
-## ⚠️ Uso responsable
+- **CAMINA →** para avanzar un paso por el suelo.
+- **SALTA ↑** para cruzar un hueco o unos pinchos.
 
-Ejecuta esta herramienta **únicamente** contra redes de tu propiedad o con
-**autorización explícita por escrito** del responsable de la red. Escanear o
-acceder a equipos ajenos sin permiso es acceso no autorizado y constituye
-delito en la mayoría de jurisdicciones, **con independencia de la intención**.
-Estar conectado a la misma red que otra persona no otorga ese permiso.
+Si te equivocas de acción o fallas el ritmo, el gato se queda sin pescado.
+Llega al final del nivel para completarlo.
 
-Si detectas una cámara de un tercero expuesta y quieres que se corrija, el
-canal correcto es reportarlo al **CERT/CSIRT** de tu país, al **ISP** o al
-**fabricante** del dispositivo — no acceder tú al equipo.
+## Cómo jugar
 
-## Requisitos
+Es una página web autónoma: abre `index.html` en el navegador (móvil o
+escritorio). No necesita instalación ni servidor.
 
-- Python 3.10+
+- **Táctil:** botones `SALTA` / `CAMINA`.
+- **Teclado:** `ESPACIO` o `↑` para saltar · `→` o `ENTER` para caminar.
 
-## Instalación
+## Estructura
 
-```bash
-python -m venv .venv
-source .venv/bin/activate   # En Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-```
+- `index.html` — el juego completo (canvas + lógica + estilos, sin dependencias).
+- Niveles definidos como cadenas al principio del `<script>`:
+  `_` suelo · `o` hueco · `x` pinchos. El primer tile es el gato, el último el pez.
 
-## Uso
+## Añadir niveles
 
-Descubrir cámaras en tu subred (la bandera `--authorized` es obligatoria y
-confirma que tienes permiso sobre esa red):
-
-```bash
-cams scan 192.168.1.0/24 --authorized
-```
-
-## Tests
-
-```bash
-pytest
-```
-
-## Estado / hoja de ruta
-
-- [x] Carga de la lista de cámaras desde YAML (`cams.sources`)
-- [x] Descubrimiento por escaneo de puertos con barrera de autorización (`cams.discovery`)
-- [ ] Comprobación de streams RTSP/HLS y captura de fotograma (OpenCV)
-- [ ] Detección de acceso sin autenticación (hallazgos de seguridad)
-- [ ] Visor web de los feeds
+Edita el array `LEVELS` en `index.html`. Cada nivel tiene `name`, `bpm`
+(velocidad del ritmo) y `map`. Regla: los obstáculos van siempre aislados
+(suelo antes y después) para que el salto caiga seguro.
