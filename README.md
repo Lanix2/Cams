@@ -1,30 +1,38 @@
 # Gato al Pez 🐱🐟
 
-Juego de ritmo pixelart en 2D. Un gato tiene que llegar **exacto** hasta su
-pescado cruzando huecos y pinchos. En cada beat pulsas la acción correcta:
+Puzzle de plataformas 2D pixelart. Programas un **bucle de hasta 4 acciones**
+y el gato las repite al ritmo hasta llegar **exacto** a su pescado.
 
-- **CAMINA →** para avanzar un paso por el suelo.
-- **SALTA ↑** para cruzar un hueco o unos pinchos.
+## Mecánica
 
-Si te equivocas de acción o fallas el ritmo, el gato se queda sin pescado.
-Llega al final del nivel para completarlo.
+Rellena las ranuras con acciones y pulsa **EJECUTAR**. El programa se repite
+en bucle:
+
+- **→ MOVER** — avanza 1 casilla.
+- **↑ SALTAR** — sube encima de una caja, o cruza 2 casillas de un salto.
+- **⚔ ATACAR** — rompe la caja o el bicho que tiene enfrente.
+
+Obstáculos:
+
+- **Caja** (`#`): la subes de un salto o la rompes atacando.
+- **Pinchos** (`x`) y **bichos** (`b`): matan si caes sobre ellos.
+- **Hueco** (`o`): hay que saltarlo.
+
+Como el salto avanza **2** casillas, puedes pasarte del pez y perder: hay que
+llegar **exacto**.
 
 ## Cómo jugar
 
-Es una página web autónoma: abre `index.html` en el navegador (móvil o
-escritorio). No necesita instalación ni servidor.
+Página web autónoma: abre `index.html` (móvil o escritorio), sin instalación.
 
-- **Táctil:** botones `SALTA` / `CAMINA`.
-- **Teclado:** `ESPACIO` o `↑` para saltar · `→` o `ENTER` para caminar.
+- **Táctil:** botones MOVER / SALTAR / ATACAR para llenar el bucle, y EJECUTAR.
+- **Teclado:** `→` mover · `↑`/`ESPACIO` saltar · `A` atacar · `ENTER` ejecutar · `RETROCESO` borrar.
 
 ## Estructura
 
-- `index.html` — el juego completo (canvas + lógica + estilos, sin dependencias).
-- Niveles definidos como cadenas al principio del `<script>`:
-  `_` suelo · `o` hueco · `x` pinchos. El primer tile es el gato, el último el pez.
+- `index.html` — juego completo (canvas + lógica + estilos, sin dependencias).
+- Niveles en el array `LEVELS`. Cada columna:
+  `C` gato · `_` suelo · `o` hueco · `x` pinchos · `b` bicho · `#` caja · `F` pez.
 
-## Añadir niveles
-
-Edita el array `LEVELS` en `index.html`. Cada nivel tiene `name`, `bpm`
-(velocidad del ritmo) y `map`. Regla: los obstáculos van siempre aislados
-(suelo antes y después) para que el salto caiga seguro.
+Todos los niveles están verificados por fuerza bruta: tienen solución con un
+bucle de 4 acciones o menos.
