@@ -49,11 +49,22 @@
   .slot.jump{color:var(--jump); border-color:var(--jump)}
   .slot.attack{color:var(--atk); border-color:var(--atk)}
   .slot.active{transform:scale(1.1); box-shadow:0 0 0 2px currentColor,0 0 16px currentColor}
+  .slot.ghost{opacity:.32; border-style:dotted}
+  .slot.ghost.move{color:var(--move); border-color:var(--move)}
+  .slot.ghost.jump{color:var(--jump); border-color:var(--jump)}
+  .slot.ghost.attack{color:var(--atk); border-color:var(--atk)}
   #loopmark{font-family:var(--pixel); font-size:11px; color:var(--muted); margin-left:2px}
 
   /* ---- Canvas ---- */
   #stagewrap{position:relative; flex:1 1 auto; min-height:0}
-  #game{display:block; width:100%; height:100%}
+  #game{display:block; width:100%; height:100%; touch-action:none; cursor:grab}
+  #game.dragging{cursor:grabbing}
+  #dragHint{
+    position:absolute; left:50%; bottom:12px; transform:translateX(-50%); z-index:5;
+    font-family:var(--pixel); font-size:9px; letter-spacing:1px; color:var(--muted);
+    background:rgba(10,14,40,.75); border:2px solid var(--panel-b); border-radius:10px;
+    padding:7px 12px; pointer-events:none; transition:opacity .4s; white-space:nowrap;
+  }
   #float{position:absolute; inset:0; pointer-events:none; display:grid; place-items:center; z-index:4}
   #judge{font-family:var(--pixel); font-size:clamp(15px,5.5vw,26px); opacity:0;
     text-shadow:0 3px 0 rgba(0,0,0,.4)}
@@ -128,6 +139,7 @@
 
 <div id="stagewrap">
   <canvas id="game"></canvas>
+  <div id="dragHint" hidden>⟷ DESLIZA PARA VER EL MAPA</div>
   <div id="float"><div id="judge"></div></div>
 
   <div class="overlay" id="titleScreen">
@@ -202,12 +214,21 @@
   // Verificados: todos tienen solución con un bucle de <=4 acciones.
   // ===========================================================================
   const LEVELS = [
-    { name:"PRIMEROS PASOS", bpm:80,  cols:"C___F" },
-    { name:"EL FOSO",        bpm:88,  cols:"C__o__F" },
-    { name:"SUBE Y BAJA",    bpm:96,  cols:"C_#F" },
-    { name:"EL BICHO",       bpm:100, cols:"C_b_F" },
-    { name:"PINCHOS",        bpm:108, cols:"C__x_F" },
-    { name:"EL GRAN PEZ",    bpm:116, cols:"C_#_o_b_#_F" },
+    { name:"PRIMEROS PASOS",   bpm:80,  cols:"C___F" },
+    { name:"EL FOSO",          bpm:86,  cols:"C__o__F" },
+    { name:"SUBE Y BAJA",      bpm:92,  cols:"C_#F" },
+    { name:"EL BICHO",         bpm:96,  cols:"C_b_F" },
+    { name:"PINCHOS",          bpm:100, cols:"C__x_F" },
+    { name:"DOBLE PÚA",        bpm:104, cols:"C_x_x_F" },
+    { name:"FOSO Y PÚA",       bpm:106, cols:"C_o_x_F" },
+    { name:"BICHO Y CAJA",     bpm:108, cols:"C_b#_F" },
+    { name:"ENTRE CAJAS",      bpm:110, cols:"C_#_b_#_F" },
+    { name:"SALTO LARGO",      bpm:112, cols:"C___o___F" },
+    { name:"SALTOS EN CADENA", bpm:112, cols:"C_o_o_o_F" },
+    { name:"TRÍO PELIGROSO",   bpm:114, cols:"C_x_o_b_F" },
+    { name:"LA TRAVESÍA",      bpm:116, cols:"C_x__o__x_F" },
+    { name:"EL LABERINTO",     bpm:118, cols:"C__#__o__#__F" },
+    { name:"EL GRAN PEZ",      bpm:120, cols:"C_#_o_b_#_o_F" },
   ];
 
   // ===========================================================================
@@ -287,11 +308,12 @@
   const G = {
     levelIndex:0, level:null, baseTiles:[], fishIdx:0,
     state:'title',          // title | edit | run | won | dead
-    program:[],
+    program:[], ghost:null, // ghost = último combo tras fallar (transparente)
     beatMs:750,
     frames:null, result:null, reason:null,
     animFrom:0, animTo:1, animStart:0, animDur:280,
     unlocked:0, deathT:0, confetti:[],
+    scroll:0,               // desplazamiento manual de cámara (px)
   };
   try{ const s=JSON.parse(localStorage.getItem('gatoalpez2')||'{}'); G.unlocked=Math.min(s.unlocked||0, LEVELS.length-1);}catch(e){}
   function save(){ try{ localStorage.setItem('gatoalpez2', JSON.stringify({unlocked:G.unlocked})); }catch(e){} }
@@ -319,6 +341,7 @@
     if(!stars.length||stars._w!==w){ stars=[]; const n=Math.round(w*h/9000);
       for(let i=0;i<n;i++)stars.push({x:Math.random()*w,y:Math.random()*h*0.85,r:Math.random()<0.85?1:2,tw:Math.random()*6.28,sp:0.4+Math.random()*1.2});
       stars._w=w; }
+    if(G.baseTiles.length) G.scroll=clampCam(G.scroll);
   }
   addEventListener('resize',resize);
 
@@ -359,16 +382,20 @@
     return G.baseTiles;
   }
 
-  // ---- dibujo ----
-  function camX(colF){ const cx=colCenter(colF); let c=cx-W*0.34;
-    const worldW=G.baseTiles.length*tile; return Math.max(-20,Math.min(c,Math.max(-20,worldW-W+20))); }
+  // ---- cámara ----
+  function camBounds(){ const worldW=G.baseTiles.length*tile; return [-20, Math.max(-20, worldW-W+20)]; }
+  function clampCam(c){ const [a,b]=camBounds(); return Math.max(a,Math.min(c,b)); }
+  const camFollow = colF => clampCam(colCenter(colF)-W*0.34);
+  // durante la ejecución la cámara sigue al gato; el resto del tiempo es manual (deslizable)
+  function currentCam(cat){ return G.state==='run' ? camFollow(cat.colF) : clampCam(G.scroll); }
+  function levelIsWide(){ const [a,b]=camBounds(); return b>a+4; }
 
   function draw(now){
     ctx.clearRect(0,0,W,H);
     ctx.fillStyle=getCSS('--bg'); ctx.fillRect(0,0,W,H);
     if(!G.level){ return; }
     const cat=catVisual(now);
-    const cx=camX(cat.colF);
+    const cx=currentCam(cat);
     // rejilla
     ctx.strokeStyle=getCSS('--grid'); ctx.lineWidth=1; ctx.beginPath();
     for(let x=-(cx%tile); x<W; x+=tile){ ctx.moveTo(x,0); ctx.lineTo(x,H); }
@@ -458,7 +485,9 @@
 
   function finishRun(){
     const res=G.result;
-    if(res==='win'){ G.state='won'; sWin(); burst();
+    const lastCol=G.frames[G.frames.length-1].col;
+    G.scroll=camFollow(lastCol); // deja la vista donde terminó la jugada
+    if(res==='win'){ G.state='won'; G.ghost=null; sWin(); burst();
       G.unlocked=Math.max(G.unlocked,Math.min(G.levelIndex+1,LEVELS.length-1)); save();
       const last=G.levelIndex>=LEVELS.length-1;
       winTitle.textContent=last?'¡GATO FELIZ!':'¡NIVEL COMPLETO!';
@@ -466,6 +495,7 @@
       nextBtn.hidden=last; setTimeout(()=>show(winScreen),450);
     } else {
       G.state='dead'; sFail(); G.deathT=performance.now();
+      G.ghost=G.program.slice(); G.program=[]; renderSlots(); // vacía el combo, deja el rastro
       const R={over:['¡TE PASASTE!','El salto son 2 casillas y el gato pasó de largo el pez.'],
         gap:['¡AL VACÍO!','El gato pisó un hueco. Necesitas saltarlo.'],
         spike:['¡PINCHOS!','Caer sobre los pinchos es mortal. Sáltalos o rodéalos.'],
@@ -487,9 +517,12 @@
     slotsEl.innerHTML='';
     for(let i=0;i<4;i++){
       const d=document.createElement('div'); d.className='slot';
-      const a=G.program[i];
+      const a=G.program[i], g=G.ghost&&G.ghost[i];
       if(a){ d.classList.add('filled',a); d.textContent=GLY[a];
         if(G.state==='edit'){ d.title='Quitar'; d.onclick=()=>{ G.program.splice(i,1); renderSlots(); updateControls(); }; } }
+      else if(g){ // rastro transparente del último combo; tócalo para recuperarlo
+        d.classList.add('ghost',g); d.textContent=GLY[g];
+        if(G.state==='edit'&&i===G.program.length){ d.title='Recuperar'; d.onclick=()=>addAction(g); } }
       else { d.textContent=''; }
       if(i===activeIdx) d.classList.add('active');
       slotsEl.appendChild(d);
@@ -511,7 +544,7 @@
     clearBtn.toggleAttribute('disabled',!editing||G.program.length===0);
     runBtn.toggleAttribute('disabled',!editing||G.program.length===0);
     hint.textContent = running ? 'Ejecutando el bucle…'
-      : G.program.length===0 ? 'Rellena las ranuras y pulsa EJECUTAR.'
+      : G.program.length===0 ? (G.ghost ? 'Toca el rastro para recuperar tu último combo.' : 'Rellena las ranuras y pulsa EJECUTAR.')
       : 'Pulsa ▶ EJECUTAR, o toca una ranura para quitarla.';
   }
 
@@ -528,10 +561,16 @@
     G.baseTiles=[...G.level.cols].map(c=>c==='C'?'_':c);
     G.fishIdx=G.level.cols.indexOf('F');
     G.beatMs=60000/G.level.bpm; G.animDur=Math.min(G.beatMs*0.9,300);
-    G.program=[]; G.frames=null; G.result=null; G.reason=null; G.confetti=[];
+    G.program=[]; G.ghost=null; G.frames=null; G.result=null; G.reason=null; G.confetti=[];
     G.state='edit'; hideScreens();
+    G.scroll=camBounds()[0]; // vista al inicio del mapa
     stageNum.textContent=G.levelIndex+1; stageName.textContent=G.level.name;
-    renderSlots(); updateControls();
+    renderSlots(); updateControls(); showDragHint();
+  }
+  function showDragHint(){
+    if(levelIsWide()){ dragHint.hidden=false; dragHint.style.opacity='1';
+      clearTimeout(showDragHint._t); showDragHint._t=setTimeout(()=>{ dragHint.style.opacity='0'; setTimeout(()=>dragHint.hidden=true,400); }, 2600); }
+    else dragHint.hidden=true;
   }
 
   function runProgram(){
@@ -559,7 +598,7 @@
   const winTitle=document.getElementById('winTitle'), winSub=document.getElementById('winSub');
   const deadTitle=document.getElementById('deadTitle'), deadSub=document.getElementById('deadSub');
   const nextBtn=document.getElementById('nextBtn'), levelList=document.getElementById('levelList');
-  const judgeEl=document.getElementById('judge');
+  const judgeEl=document.getElementById('judge'), dragHint=document.getElementById('dragHint');
   function judge(t,c){ judgeEl.textContent=t; judgeEl.style.color=c; judgeEl.classList.remove('show'); void judgeEl.offsetWidth; judgeEl.classList.add('show'); }
 
   function bind(el,fn){ el.addEventListener('pointerdown',e=>{e.preventDefault();fn();});
@@ -581,6 +620,22 @@
       else if(e.code==='Enter')runProgram();
       else if(e.code==='Backspace'){e.preventDefault();G.program.pop();renderSlots();updateControls();} }
   });
+
+  // ---- arrastre para explorar el mapa (cuando no se ejecuta) ----
+  let drag=null;
+  cv.addEventListener('pointerdown', e=>{
+    if(G.state==='run'||G.state==='title'||!G.level) return;
+    drag={ x:e.clientX, scroll:G.scroll };
+    cv.classList.add('dragging'); cv.setPointerCapture?.(e.pointerId);
+    if(!dragHint.hidden){ dragHint.style.opacity='0'; setTimeout(()=>dragHint.hidden=true,400); }
+  });
+  cv.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    G.scroll=clampCam(drag.scroll - (e.clientX-drag.x));
+  });
+  const endDrag=()=>{ drag=null; cv.classList.remove('dragging'); };
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
 
   // ---- arranque ----
   function boot(){ resize(); G.state='title'; requestAnimationFrame(loop); }

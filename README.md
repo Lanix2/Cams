@@ -31,7 +31,7 @@ Página web autónoma: abre `index.html` (móvil o escritorio), sin instalación
 ## Estructura
 
 - `index.html` — juego completo (canvas + lógica + estilos, sin dependencias).
-- Niveles en el array `LEVELS`. Cada columna:
+- 15 niveles en el array `LEVELS`. Cada columna:
   `C` gato · `_` suelo · `o` hueco · `x` pinchos · `b` bicho · `#` caja · `F` pez.
 
 Todos los niveles están verificados por fuerza bruta: tienen solución con un
