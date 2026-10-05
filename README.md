@@ -22,6 +22,13 @@ Obstáculos:
 Como el salto avanza **2** casillas, puedes pasarte del pez y perder: hay que
 llegar **exacto**. Y si le das un **zarpazo al pez**, también pierdes.
 
+## Ranuras
+
+Cada bloque de 10 niveles añade **una ranura de acción** más (de 4 en el nivel 1
+hasta 13 en el 100). La complejidad de cada bloque se adapta a ese presupuesto:
+la solución mínima crece de ~2 acciones al principio hasta ~8, y los mapas se
+alargan hacia el final.
+
 ## Cómo jugar
 
 Página web autónoma: abre `index.html` (móvil o escritorio), sin instalación.
