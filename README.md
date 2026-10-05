@@ -10,16 +10,17 @@ en bucle:
 
 - **→ MOVER** — avanza 1 casilla.
 - **↑ SALTAR** — sube encima de una caja, o cruza 2 casillas de un salto.
-- **⚔ ATACAR** — rompe la caja o el bicho que tiene enfrente.
+- **🐾 ZARPAZO** — rompe la caja, o mata al bicho que tiene enfrente.
 
 Obstáculos:
 
 - **Caja** (`#`): la subes de un salto o la rompes atacando.
-- **Pinchos** (`x`) y **bichos** (`b`): matan si caes sobre ellos.
+- **Pinchos** (`x`): matan si caes sobre ellos.
+- **Bicho verde** (`b`): mata al contacto y **no se puede saltar**; solo se mata con el zarpazo.
 - **Hueco** (`o`): hay que saltarlo.
 
 Como el salto avanza **2** casillas, puedes pasarte del pez y perder: hay que
-llegar **exacto**.
+llegar **exacto**. Y si le das un **zarpazo al pez**, también pierdes.
 
 ## Cómo jugar
 
