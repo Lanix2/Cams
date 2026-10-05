@@ -56,7 +56,7 @@
   #loopmark{font-family:var(--pixel); font-size:11px; color:var(--muted); margin-left:2px}
 
   /* ---- Canvas ---- */
-  #stagewrap{position:relative; flex:1 1 auto; min-height:0}
+  #stagewrap{position:relative; flex:1 1 auto; min-height:0; overflow:hidden}
   #game{display:block; width:100%; height:100%; touch-action:none; cursor:grab}
   #game.dragging{cursor:grabbing}
   #dragHint{
@@ -74,16 +74,18 @@
 
   /* ---- Controles ---- */
   #controls{
-    flex:0 0 auto; padding:12px 16px;
+    position:relative; z-index:2;
+    flex:0 0 auto; padding:16px 16px 12px;
     padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
-    background:linear-gradient(0deg,#090d28,#0b1030);
-    border-top:2px solid rgba(120,150,255,.14);
+    background:#070a20;
+    border-top:3px solid var(--surface);
+    box-shadow:0 -10px 24px rgba(4,6,20,.9);
     display:flex; flex-direction:column; gap:10px;
   }
   #actions{display:flex; gap:10px; justify-content:center}
   .act{
     flex:1 1 0; max-width:150px; min-height:78px; border-radius:14px; cursor:pointer;
-    background:var(--panel); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+    background:#121a44; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
     font-family:var(--pixel); font-size:11px; letter-spacing:.5px;
     transition:transform .06s, box-shadow .06s;
   }
@@ -121,6 +123,15 @@
   .row{display:flex; gap:12px; flex-wrap:wrap; justify-content:center}
   .legend{font-size:19px; color:var(--muted); line-height:1.6; text-align:left; max-width:34ch}
   .legend b{color:var(--text)}
+  #levelList{display:grid; grid-template-columns:repeat(auto-fill,minmax(48px,1fr));
+    gap:8px; width:min(92vw,520px); max-height:52vh; overflow-y:auto; padding:4px}
+  .lvlbtn{font-family:var(--pixel); font-size:12px; cursor:pointer; aspect-ratio:1;
+    display:grid; place-items:center; border-radius:9px; color:#08122b; background:var(--gold);
+    border:none; font-variant-numeric:tabular-nums}
+  .lvlbtn.locked{background:transparent; color:var(--muted); border:2px solid var(--panel-b); cursor:not-allowed}
+  .lvlbtn.current{outline:3px solid var(--surface); outline-offset:2px}
+  .lvlbtn:not(.locked):active{transform:translateY(2px)}
+  #menuName{font-size:20px; color:var(--surface); min-height:24px; font-family:var(--read)}
   [hidden]{display:none!important}
   :focus-visible{outline:3px solid var(--gold); outline-offset:2px}
   @media (prefers-reduced-motion:reduce){#judge.show{animation-duration:.01s}}
@@ -179,7 +190,8 @@
   <div class="overlay" id="menuScreen" hidden>
     <div class="card">
       <div class="big gold" style="font-size:clamp(18px,6vw,28px)">NIVELES</div>
-      <div class="row" id="levelList"></div>
+      <div id="menuName"></div>
+      <div id="levelList"></div>
       <button class="btn ghost" id="menuClose">CERRAR</button>
     </div>
   </div>
@@ -214,21 +226,106 @@
   // Verificados: todos tienen solución con un bucle de <=4 acciones.
   // ===========================================================================
   const LEVELS = [
-    { name:"PRIMEROS PASOS",   bpm:80,  cols:"C___F" },
-    { name:"EL FOSO",          bpm:86,  cols:"C__o__F" },
-    { name:"SUBE Y BAJA",      bpm:92,  cols:"C_#F" },
-    { name:"EL BICHO",         bpm:96,  cols:"C_b_F" },
-    { name:"PINCHOS",          bpm:100, cols:"C__x_F" },
-    { name:"DOBLE PÚA",        bpm:104, cols:"C_x_x_F" },
-    { name:"FOSO Y PÚA",       bpm:106, cols:"C_o_x_F" },
-    { name:"BICHO Y CAJA",     bpm:108, cols:"C_b#_F" },
-    { name:"ENTRE CAJAS",      bpm:110, cols:"C_#_b_#_F" },
-    { name:"SALTO LARGO",      bpm:112, cols:"C___o___F" },
-    { name:"SALTOS EN CADENA", bpm:112, cols:"C_o_o_o_F" },
-    { name:"TRÍO PELIGROSO",   bpm:114, cols:"C_x_o_b_F" },
-    { name:"LA TRAVESÍA",      bpm:116, cols:"C_x__o__x_F" },
-    { name:"EL LABERINTO",     bpm:118, cols:"C__#__o__#__F" },
-    { name:"EL GRAN PEZ",      bpm:120, cols:"C_#_o_b_#_o_F" },
+    { name:"PRIMEROS PASOS", bpm:80, cols:"C___F" },
+    { name:"EL FOSO", bpm:86, cols:"C__o__F" },
+    { name:"SUBE Y BAJA", bpm:92, cols:"C_#F" },
+    { name:"EL BICHO", bpm:96, cols:"C_b_F" },
+    { name:"PINCHOS", bpm:100, cols:"C__x_F" },
+    { name:"PRIMER TRECHO", bpm:98, cols:"C__#F" },
+    { name:"BRINCO", bpm:98, cols:"C___##F" },
+    { name:"PASITO", bpm:99, cols:"C___#__F" },
+    { name:"EL CHARCO", bpm:99, cols:"Co_#F" },
+    { name:"LA PÚA", bpm:100, cols:"C__b#F" },
+    { name:"LA CAJA", bpm:100, cols:"C#_b_#F" },
+    { name:"EL BICHITO", bpm:101, cols:"C_____bF" },
+    { name:"VEREDA", bpm:101, cols:"Cb___#_#F" },
+    { name:"REPECHO", bpm:102, cols:"C_b_b_F" },
+    { name:"DOS PASOS", bpm:102, cols:"C_#b___F" },
+    { name:"SALTITO", bpm:102, cols:"C###_xF" },
+    { name:"EL HUECO", bpm:103, cols:"Cx_#_oF" },
+    { name:"TROPIEZO", bpm:103, cols:"Co#_oF" },
+    { name:"LA LOSA", bpm:104, cols:"Cb___#_#__F" },
+    { name:"PEQUEÑO FOSO", bpm:104, cols:"C_b##bF" },
+    { name:"PRIMER TRECHO", bpm:105, cols:"C##_#_oF" },
+    { name:"BRINCO", bpm:105, cols:"Co______#F" },
+    { name:"PASITO", bpm:106, cols:"C______x_F" },
+    { name:"EL CHARCO", bpm:106, cols:"C__#_o#_F" },
+    { name:"LA PÚA", bpm:106, cols:"Cb__bbF" },
+    { name:"LA CAJA", bpm:107, cols:"C##_o_bF" },
+    { name:"EL BICHITO", bpm:107, cols:"C#_x__oF" },
+    { name:"VEREDA", bpm:108, cols:"C_x___#_#F" },
+    { name:"REPECHO", bpm:108, cols:"C#_#_b_oF" },
+    { name:"DOS PASOS", bpm:109, cols:"C##_o__bF" },
+    { name:"SALTITO", bpm:109, cols:"C___o_____#F" },
+    { name:"EL HUECO", bpm:110, cols:"C_b##_b___F" },
+    { name:"TROPIEZO", bpm:110, cols:"Cbbb_#F" },
+    { name:"LA LOSA", bpm:111, cols:"Co________xF" },
+    { name:"ESPINAZO", bpm:111, cols:"Cbbb_b_F" },
+    { name:"CAJÓN", bpm:111, cols:"Cx__x______#F" },
+    { name:"FOSO HONDO", bpm:112, cols:"C_o__#_x_F" },
+    { name:"SENDA ROTA", bpm:112, cols:"Co_#__#_oF" },
+    { name:"EL CRUCE", bpm:113, cols:"Cbb_b____#__F" },
+    { name:"DIENTES", bpm:113, cols:"C_o_#_x_F" },
+    { name:"EL SALTADOR", bpm:114, cols:"C_o__#_##_bF" },
+    { name:"ZIGZAG", bpm:114, cols:"C#_x_b__#x__#_F" },
+    { name:"LA RONDA", bpm:115, cols:"C#_x#_#___#_b_F" },
+    { name:"EL RODEO", bpm:115, cols:"C_###o##_#_x____F" },
+    { name:"CUESTA", bpm:115, cols:"C_b#_x__#____x#_b_F" },
+    { name:"DOBLE FILO", bpm:116, cols:"Co_b#F" },
+    { name:"EL ZANJÓN", bpm:116, cols:"C_#_____oF" },
+    { name:"MURO BAJO", bpm:117, cols:"Cb#x#F" },
+    { name:"CORNISA", bpm:117, cols:"C_b_x#F" },
+    { name:"LA GRIETA", bpm:118, cols:"C#_#___x#__F" },
+    { name:"PANTANO", bpm:118, cols:"Co_o__xF" },
+    { name:"EL RELEVO", bpm:119, cols:"C#___x_x_F" },
+    { name:"TRES EN RAYA", bpm:119, cols:"C#o____x_F" },
+    { name:"EL VAIVÉN", bpm:119, cols:"C_##__b___x_F" },
+    { name:"ESPINAZO", bpm:120, cols:"Cx__x#x_F" },
+    { name:"CAJÓN", bpm:120, cols:"C#_#x#_#__F" },
+    { name:"FOSO HONDO", bpm:121, cols:"C___b_#oF" },
+    { name:"SENDA ROTA", bpm:121, cols:"Co_x__#o_F" },
+    { name:"EL CRUCE", bpm:122, cols:"C#o__b_F" },
+    { name:"DIENTES", bpm:122, cols:"Cb__x____#_F" },
+    { name:"EL SALTADOR", bpm:123, cols:"Cb___o___F" },
+    { name:"ZIGZAG", bpm:123, cols:"C_o___#__#xF" },
+    { name:"LA TRAMPA", bpm:123, cols:"C##b__b_x#__F" },
+    { name:"DÉDALO", bpm:124, cols:"C_b__#_x_b_F" },
+    { name:"VÉRTIGO", bpm:124, cols:"C#bx_#_#F" },
+    { name:"DESFILADERO", bpm:125, cols:"C_b____bo___F" },
+    { name:"EL ABISMO", bpm:125, cols:"Cb#b_#bx#F" },
+    { name:"TRAMPA MORTAL", bpm:126, cols:"C_____b__#b__o__F" },
+    { name:"LABERINTO", bpm:126, cols:"Co_##bo_F" },
+    { name:"EL COMPÁS", bpm:127, cols:"C_#b_____bx#_oF" },
+    { name:"RUINAS", bpm:127, cols:"C_#_____x#_b#F" },
+    { name:"FILO Y VACÍO", bpm:127, cols:"C_#bb_##bo_boF" },
+    { name:"CARRERA", bpm:128, cols:"C_b_#___x__#_b__xF" },
+    { name:"EL ENGRANAJE", bpm:128, cols:"C_#_x_o_#___#x__o_o_F" },
+    { name:"TORMENTA", bpm:129, cols:"Cx#_x_##b#bb_#x_F" },
+    { name:"PRECIPICIO", bpm:129, cols:"C_o_o#_F" },
+    { name:"PÚAS GEMELAS", bpm:130, cols:"C___x#__oF" },
+    { name:"EL RELOJ", bpm:130, cols:"C_#_o___xF" },
+    { name:"NUDO GORDIANO", bpm:131, cols:"Cb__o_b#o_F" },
+    { name:"ENCRUCIJADA", bpm:131, cols:"C#__#_o_x_b_F" },
+    { name:"EL BARRANCO", bpm:132, cols:"C__x__x_##F" },
+    { name:"PÉNDULO", bpm:132, cols:"C#_x_#o_#___F" },
+    { name:"LA TRAMPA", bpm:132, cols:"Cb#_o#x_o_F" },
+    { name:"DÉDALO", bpm:133, cols:"Co_b__o_x#_F" },
+    { name:"VÉRTIGO", bpm:133, cols:"Cb#__x#b_#b_F" },
+    { name:"SIN RED", bpm:134, cols:"C__#__o#_o_b__F" },
+    { name:"EL ORÁCULO", bpm:134, cols:"C_bo#__x_F" },
+    { name:"CAOS", bpm:135, cols:"Co_o__b#o_#F" },
+    { name:"EL MAESTRO GATO", bpm:135, cols:"C__bx_o__bF" },
+    { name:"EL INFIERNO", bpm:136, cols:"C_____o##b_bF" },
+    { name:"ÚLTIMO ALIENTO", bpm:136, cols:"Cbx_b_b__x_F" },
+    { name:"DANZA DEL VACÍO", bpm:136, cols:"Co##_b__b_oF" },
+    { name:"EL VIRTUOSO", bpm:137, cols:"Co#bb#o_#bF" },
+    { name:"PESADILLA", bpm:137, cols:"C_____o_____b_#F" },
+    { name:"EL CÓNCLAVE", bpm:138, cols:"Cx_#_###__#b_b_F" },
+    { name:"AL LÍMITE", bpm:138, cols:"C___o_b##_x#o#o#F" },
+    { name:"PURGATORIO", bpm:139, cols:"C__x#_o_#bo_____F" },
+    { name:"SIN RED", bpm:139, cols:"C_b_o#_#__b_##_#xF" },
+    { name:"EL ORÁCULO", bpm:140, cols:"Co___##b__##__#bo_b_F" },
+    { name:"GRAN FINAL", bpm:140, cols:"Cbb_#o#_b_b##bx_#___xF" },
   ];
 
   // ===========================================================================
@@ -241,7 +338,7 @@
     const isBox = i => tiles[i] === '#';
     const hazard = t => (t === 'o' || t === 'x' || t === 'b');
     const frames = [{ col, onBox, tiles: tiles.slice(), act:null, event:'start', result:null }];
-    const maxSteps = Math.max(program.length * 8, 24);
+    const maxSteps = Math.max(baseTiles.length * 6, program.length * 8, 40);
 
     for (let s = 0; s < maxSteps; s++){
       const act = program[s % program.length];
@@ -583,11 +680,15 @@
   function stopRun(){ G.state='edit'; G.frames=null; renderSlots(); updateControls(); }
   function backToEdit(){ hideScreens(); G.state='edit'; G.frames=null; renderSlots(); updateControls(); }
 
-  function buildMenu(){ levelList.innerHTML='';
+  function buildMenu(){ levelList.innerHTML=''; menuName.textContent='';
     LEVELS.forEach((lv,i)=>{ const b=document.createElement('button'); const locked=i>G.unlocked;
-      b.className='btn'+(locked?' ghost':''); b.style.fontSize='11px';
-      b.textContent=(i+1)+'. '+(locked?'🔒':lv.name); b.disabled=locked;
-      b.onclick=()=>loadLevel(i); levelList.appendChild(b); }); }
+      b.className='lvlbtn'+(locked?' locked':'')+(i===G.levelIndex?' current':'');
+      b.textContent=locked?'🔒':(i+1); b.disabled=locked; b.title=lv.name;
+      b.onmouseenter=()=>{ menuName.textContent=(i+1)+' · '+(locked?'BLOQUEADO':lv.name); };
+      if(!locked) b.onclick=()=>loadLevel(i);
+      levelList.appendChild(b); });
+    const cur=levelList.children[G.levelIndex]; if(cur&&cur.scrollIntoView) cur.scrollIntoView({block:'center'});
+  }
 
   // ---- refs + eventos ----
   const aMove=document.getElementById('aMove'), aJump=document.getElementById('aJump'), aAttack=document.getElementById('aAttack');
@@ -597,7 +698,7 @@
   const winScreen=document.getElementById('winScreen'), deadScreen=document.getElementById('deadScreen'), menuScreen=document.getElementById('menuScreen');
   const winTitle=document.getElementById('winTitle'), winSub=document.getElementById('winSub');
   const deadTitle=document.getElementById('deadTitle'), deadSub=document.getElementById('deadSub');
-  const nextBtn=document.getElementById('nextBtn'), levelList=document.getElementById('levelList');
+  const nextBtn=document.getElementById('nextBtn'), levelList=document.getElementById('levelList'), menuName=document.getElementById('menuName');
   const judgeEl=document.getElementById('judge'), dragHint=document.getElementById('dragHint');
   function judge(t,c){ judgeEl.textContent=t; judgeEl.style.color=c; judgeEl.classList.remove('show'); void judgeEl.offsetWidth; judgeEl.classList.add('show'); }
 
